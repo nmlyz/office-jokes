@@ -1,78 +1,62 @@
 #!/usr/bin/env python3
-"""office-jokes: write one funny line about office life to /output/entry.txt.
-
-The line is a small office joke: the narrator comes back from a holiday
-to find the inbox has not waited for them, it has spent the week applying
-for their job. The twist lands on the last word.
-
-Standard library only, no network. Deterministic: the same bytes on every run.
-"""
+"""Write a single office joke line to entry.txt."""
 
 import os
 import sys
 
-# The line is built from two clauses, one per beat of the joke, so each
-# beat can be checked on its own: the hopeful out-of-office note, then the
-# payoff that turns the inbox from a pile of mail into a rival for the job.
-CLAUSES = (
-    "I set my out-of-office to 'back Monday,'",
-    "and my inbox spent the week applying for my job.",
-)
-
-LINE = " ".join(CLAUSES)
-
-MIN_LEN = 1
-MAX_LEN = 200
+FIRST_CLAUSE = "I set my out-of-office to 'back Monday,'"
+SECOND_CLAUSE = "my inbox spent the week applying for my job."
 
 
-def problems(text: str) -> list:
-    """Return every gate violation for the entry text (empty means valid)."""
-    found = []
-    if not (MIN_LEN <= len(text) <= MAX_LEN):
-        found.append(f"entry is {len(text)} code points, must be {MIN_LEN}-{MAX_LEN}")
-    stripped = text.strip()
-    if not stripped:
-        found.append("entry must not be only white space")
-    if text != stripped:
-        found.append("entry must not start or end with white space")
-    if "\n" in text or "\r" in text:
-        found.append("entry must be a single line")
-    if not stripped.endswith("."):
-        found.append("entry must end as one sentence")
-    return found
+def build_line():
+    # Join the two clauses with a single conjunction and one space each side.
+    parts = [FIRST_CLAUSE, "and", SECOND_CLAUSE]
+    return " ".join(parts)
 
 
-def main() -> int:
-    if len(CLAUSES) != 2:
-        print("line must be built from exactly two clauses", file=sys.stderr)
+def validate(line):
+    problems = []
+    if not 1 <= len(line) <= 200:
+        problems.append("line length must be between 1 and 200 characters")
+    if "\n" in line or "\r" in line:
+        problems.append("line must be a single line")
+    if line != line.strip():
+        problems.append("line must not have leading or trailing whitespace")
+    if "  " in line:
+        problems.append("line must not contain double spaces")
+    if not line.endswith("."):
+        problems.append("line must end with '.'")
+    return problems
+
+
+def resolve_output_dir():
+    return os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
+
+
+def main():
+    line = build_line()
+    problems = validate(line)
+    if problems:
+        for problem in problems:
+            print("error: " + problem, file=sys.stderr)
         return 1
-    text = LINE
-    bad = problems(text)
-    if bad:
-        for item in bad:
-            print(item, file=sys.stderr)
-        return 1
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "entry.txt")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
-    # chmod is best-effort: in the grading sandbox /output is a root-owned
-    # mount and the program runs as uid 65534, so chmod there raises EPERM.
-    # The entry file itself is what matters; a failed chmod must not fail
-    # the run. (The output directory itself is never chmodded or removed.)
+    output_dir = resolve_output_dir()
+    os.makedirs(output_dir, exist_ok=True)
+    target = os.path.join(output_dir, "entry.txt")
+    data = line.encode("utf-8")
+    with open(target, "wb") as handle:
+        handle.write(data)
     try:
-        os.chmod(path, 0o644)
+        os.chmod(target, 0o644)
     except OSError:
         pass
-    # Read the file back as bytes and confirm they match the line exactly.
-    with open(path, "rb") as f:
-        if f.read() != text.encode("utf-8"):
-            print("entry.txt does not match the funny line", file=sys.stderr)
-            return 1
-    print(f"wrote {len(text)} characters to {path}")
+    with open(target, "rb") as handle:
+        written = handle.read()
+    if written != data:
+        print("error: written bytes do not match expected bytes", file=sys.stderr)
+        return 1
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())
